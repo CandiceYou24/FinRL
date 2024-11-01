@@ -31,15 +31,24 @@ class TradeSimulator:
         args = ConfigData()
 
         """load data"""
+        
         self.factor_ary = np.load(args.predict_ary_path)
+        ## small test
+        # self.factor_ary = np.load('./data/BTC_1sec_predict_small.npy') 
         self.factor_ary = th.tensor(self.factor_ary, dtype=th.float32)  # CPU
 
         data_df = pd.read_csv(args.csv_path)  # CSV READ HERE
-
+        ## small test
+        #data_df = pd.read_csv('./data/BTC_1sec_small.csv')
+        
+        # print("size of data: ", len(data_df))
+        
         self.price_ary = data_df[["bids_distance_3", "asks_distance_3", "midpoint"]].values
         self.price_ary[:, 0] = self.price_ary[:, 2] * (1 + self.price_ary[:, 0])
         self.price_ary[:, 1] = self.price_ary[:, 2] * (1 + self.price_ary[:, 1])
 
+        # print("finish loading prices")
+        
         """Align with the rear of the dataset instead"""
         # self.price_ary = self.price_ary[: self.factor_ary.shape[0], :]
         self.price_ary = self.price_ary[-self.factor_ary.shape[0] :, :]
@@ -47,9 +56,15 @@ class TradeSimulator:
         self.price_ary = th.tensor(self.price_ary, dtype=th.float32)  # CPU
 
         self.seq_len = 3600
+        
+        # small test
+        # self.seq_len = 10
+
         self.full_seq_len = self.price_ary.shape[0]
         assert self.price_ary.shape[0] == self.factor_ary.shape[0]
 
+        # print("full_seq_len: ", self.full_seq_len)
+        
         # reset()
         self.step_i = 0
         self.step_is = th.zeros((num_sims,), dtype=th.long, device=device)
@@ -82,6 +97,9 @@ class TradeSimulator:
         device = self.device
 
         # if if_random:
+        # print(self.seq_len)
+        # print(self.full_seq_len)
+        
         i0s = np.random.randint(self.seq_len, self.full_seq_len - self.seq_len * 2, size=self.num_sims)
         self.step_i = 0
         self.step_is = th.tensor(i0s, dtype=th.long, device=self.device)
@@ -103,7 +121,7 @@ class TradeSimulator:
         self.step_i += self.step_gap
         step_is = self.step_is + self.step_i
         step_is_cpu = step_is.to(th.device("cpu"))
-
+        
         action = action.squeeze(1).to(self.device)
         action_int = action - 1  # map (0, 1, 2) to (-1, 0, +1), means (sell, nothing, buy)
         # action_int = (action - self.max_position) - self.position

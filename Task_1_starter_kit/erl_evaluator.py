@@ -48,8 +48,8 @@ class Evaluator:
             return
 
         self.eval_step_counter = self.total_step
-
         rewards_step_ten = self.get_cumulative_rewards_and_step(actor)
+        
         returns = rewards_step_ten[:, 0]  # episodic cumulative returns of an
         steps = rewards_step_ten[:, 1]  # episodic step number
         avg_r = returns.mean().item()
@@ -101,8 +101,12 @@ class Evaluator:
             self.total_step = self.recorder[-1][0]
 
     def get_cumulative_rewards_and_step(self, actor) -> Tensor:
+        
+        print("Evaluation times: ", max(1, self.eval_times // self.env.num_envs))
+        
         rewards_step_list = [get_cumulative_rewards_and_step_from_vec_env(self.env, actor)
                              for _ in range(max(1, self.eval_times // self.env.num_envs))]
+        print("reward_step_list: ", rewards_step_list)
         rewards_step_list = sum(rewards_step_list, [])
         rewards_step_ten = torch.tensor(rewards_step_list)
         return rewards_step_ten  # rewards_steps_ten.shape[1] == 2
@@ -145,6 +149,9 @@ def get_cumulative_rewards_and_steps(env, actor, if_render: bool = False) -> Tup
     for steps in range(max_step):
         tensor_state = torch.as_tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
         tensor_action = actor(tensor_state)
+        
+        # print("tensor_action: ", tensor_action)
+        
         if if_discrete:
             tensor_action = tensor_action.argmax(dim=1)
         action = tensor_action.detach().cpu().numpy()[0]  # not need detach(), because using torch.no_grad() outside
@@ -179,26 +186,41 @@ def get_cumulative_rewards_and_step_from_vec_env(env, actor) -> List[Tuple[float
     state = env.reset()  # must reset in vectorized env
     for t in range(max_step):
         action = actor(state.to(device))
-        # assert action.shape == (env.env_num, env.action_dim)
+        # print("action: ", action) 
         if if_discrete:
             action = action.argmax(dim=1, keepdim=True)
+        # print("action: ", action)
+   
+        # bug fix
+        # action = action.detach().unsqueeze(1)
+
         state, reward, done, info_dict = env.step(action)
 
         returns[t] = reward
         dones[t] = done
         action_ints.append(env.action_int)
         positions.append(env.position)
-
+    
     action_ary = torch.concatenate(action_ints, dim=0)
     action_ary = action_ary.float() # TODO for cpu only
+
     action_count = torch.histc(action_ary, bins=2 + 1, min=-1, max=1)
     action_count = action_count.data.cpu().numpy() / action_ary.shape[0]
-    action_count = np.ceil(action_count * 998).astype(np.int32)
+    
+    #bug fix: fix segmentation error
+    action_count = np.array(action_count)
 
+    # action_count = np.ceil(action_count * 998).astype(np.int32)
+    action_count = np.ceil(action_count * 998).astype(int)
     position_ary = torch.concatenate(positions, dim=0)
     position_ary = position_ary.float()
     position_count = torch.histc(position_ary, bins=env.max_position * 2 + 1, min=-2, max=2)
+    
     position_count = position_count.data.cpu().numpy() / position_ary.shape[0]
+    
+    #bug fix: fix segmentation error
+    position_count = np.array(position_count)
+    
     position_count = np.ceil(position_count * 998).astype(np.int32)
 
     print(';;;;;;', ' ' * (67 + len('[333. 218. 450.] [  0. 340. 185. 475.   0.]')),
