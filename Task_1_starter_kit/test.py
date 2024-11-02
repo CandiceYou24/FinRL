@@ -8,6 +8,8 @@ from erl_evaluator import Evaluator
 from trade_simulator import TradeSimulator, EvalTradeSimulator
 from erl_agent import AgentD3QN, AgentDoubleDQN, AgentTwinD3QN
 from erl_agent import AgentPPO, AgentA2C, AgentDiscretePPO, AgentDiscreteA2C
+from AgentTD3 import AgentTD3
+
 from collections import Counter
 import psutil
 
@@ -356,6 +358,11 @@ def run(save_path, agent_list, log_rules=False):
     ensemble_env.ensemble_train()
 
 if __name__ == "__main__":
-    # run("exps",[AgentDiscretePPO])
-    run("exps",[AgentDoubleDQN])
-    # run("exps",[AgentDiscreteA2C])
+    torch.cuda.empty_cache()
+    run("ensemble_fermion",
+        [AgentD3QN, AgentTwinD3QN],
+        # [AgentTD3]
+        # [AgentDoubleDQN]
+        # [AgentDiscretePPO]
+        # [AgentDiscreteA2C]
+       )
