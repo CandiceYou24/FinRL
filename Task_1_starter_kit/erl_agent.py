@@ -129,9 +129,12 @@ class AgentDoubleDQN:
 
         for attr_name in self.save_attr_names:
             file_path = f"{cwd}/{attr_name}.pth"
+            print("Agent file location: ", file_path)
             if if_save:
+                print(f"Saving agent network: {attr_name}")
                 th.save(getattr(self, attr_name), file_path)
             elif os.path.isfile(file_path):
+                print(f"Loading agent network: {attr_name}")
                 setattr(self, attr_name, th.load(file_path, map_location=self.device))
 
     def explore_env(self, env, horizon_len: int, if_random: bool = False) -> Tuple[Tensor, ...]:

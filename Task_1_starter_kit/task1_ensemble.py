@@ -11,8 +11,6 @@ from erl_agent import AgentD3QN, AgentDoubleDQN #, AgentTwinD3QN
 from erl_agent import AgentPPO, AgentA2C, AgentDiscretePPO, AgentDiscreteA2C
 from erl_agent import AgentDiscreteSAC
 
-from AgentTD3 import AgentTD3
-
 from collections import Counter
 import psutil
 
@@ -143,7 +141,8 @@ class Ensemble:
             args=args,
         )
         agent.save_or_load_agent(args.cwd, if_save=False)
-
+        print("args_cwd", args.cwd)
+        
         print("reset env")
         state = env.reset()
 
@@ -194,6 +193,8 @@ class Ensemble:
 
         """train loop"""
         cwd = args.cwd
+        print("args_cwd", args.cwd)
+
         break_step = args.break_step
         horizon_len = args.horizon_len
         
@@ -281,7 +282,7 @@ def run(save_path, agent_list, log_rules=False):
     import sys
 
     ##### Test Config#####
-    if_test = False
+    if_test = True
     if_tune_params = False #PPO & A2C
     if_sac = False #SAC
     #######################
