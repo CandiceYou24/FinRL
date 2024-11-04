@@ -186,13 +186,11 @@ def get_cumulative_rewards_and_step_from_vec_env(env, actor) -> List[Tuple[float
     state = env.reset()  # must reset in vectorized env
     for t in range(max_step):
         action = actor(state.to(device))
+        
         # print("action: ", action) 
         if if_discrete:
             action = action.argmax(dim=1, keepdim=True)
         # print("action: ", action)
-   
-        # bug fix
-        # action = action.detach().unsqueeze(1)
 
         state, reward, done, info_dict = env.step(action)
 

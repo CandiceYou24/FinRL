@@ -54,6 +54,7 @@ class ReplayBuffer:  # for off-policy
 
     def update(self, items: Tuple[Tensor, ...]):
         self.add_item = items
+        # print("items", items)
         states, actions, rewards, undones = items
         # assert states.shape[1:] == (env_num, state_dim)
         # assert actions.shape[1:] == (env_num, action_dim)

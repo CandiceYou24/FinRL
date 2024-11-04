@@ -6,8 +6,15 @@ from erl_config import Config, build_env
 from erl_replay_buffer import ReplayBuffer
 from erl_evaluator import Evaluator
 from trade_simulator import TradeSimulator, EvalTradeSimulator
-from erl_agent import AgentD3QN, AgentDoubleDQN, AgentTwinD3QN
+
+from erl_agent import AgentD3QN, AgentDoubleDQN #, AgentTwinD3QN
+from erl_agent import AgentPPO, AgentA2C, AgentDiscretePPO, AgentDiscreteA2C
+from erl_agent import AgentDiscreteSAC
+
+from AgentTD3 import AgentTD3
+
 from collections import Counter
+import psutil
 
 from metrics import *
 
@@ -123,9 +130,11 @@ class Ensemble:
         torch.set_grad_enabled(False)
 
         """init environment"""
+        print("build env")
         env = build_env(args.env_class, args.env_args, args.gpu_id)
 
         """init agent"""
+        print("initialize agent")
         agent = args.agent_class(
             args.net_dims,
             args.state_dim,
@@ -135,12 +144,15 @@ class Ensemble:
         )
         agent.save_or_load_agent(args.cwd, if_save=False)
 
+        print("reset env")
         state = env.reset()
 
         if args.num_envs == 1:
-            assert state.shape == (args.state_dim,)
-            assert isinstance(state, np.ndarray)
-            state = torch.tensor(state, dtype=torch.float32, device=agent.device).unsqueeze(0)
+           #bug fix: assertion and transformation is not need, cause error
+#             assert state.shape == (args.state_dim,)
+#             assert isinstance(state, np.ndarray)
+#            state = torch.tensor(state, dtype=torch.float32, device=agent.device).unsqueeze(0)
+            print("state_shape: ", state.shape)
         else:
             if state.shape != (args.num_envs, args.state_dim):
                 raise ValueError(f"state.shape == (num_envs, state_dim): {state.shape, args.num_envs, args.state_dim}")
@@ -149,11 +161,17 @@ class Ensemble:
             state = state.to(agent.device)
         assert state.shape == (args.num_envs, args.state_dim)
         assert isinstance(state, torch.Tensor)
+        
+        print("state shape", state.shape)
+        
         agent.last_state = state.detach()
 
         """init buffer"""
+        print("build buffer")
 
-        if args.if_off_policy:
+        #tmp fix: this is different for PPO and DQN
+        # if args.if_off_policy:
+        if agent.if_off_policy:
             buffer = ReplayBuffer(
                 gpu_id=args.gpu_id,
                 num_seqs=args.num_envs,
@@ -167,8 +185,10 @@ class Ensemble:
             buffer = []
 
         """init evaluator"""
+        print("build evaluator env")
         eval_env_class = args.eval_env_class if args.eval_env_class else args.env_class
         eval_env_args = args.eval_env_args if args.eval_env_args else args.env_args
+        print("env class: ", eval_env_class)
         eval_env = build_env(eval_env_class, eval_env_args, args.gpu_id)
         evaluator = Evaluator(cwd=args.cwd, env=eval_env, args=args)
 
@@ -176,25 +196,52 @@ class Ensemble:
         cwd = args.cwd
         break_step = args.break_step
         horizon_len = args.horizon_len
-        if_off_policy = args.if_off_policy
+        
+        #tmp fix: this is different for PPO and DQN
+        # if_off_policy = args.if_off_policy
+        if_off_policy = agent.if_off_policy
+        
         if_save_buffer = args.if_save_buffer
         del args
 
         import torch as th
+        
+        import psutil
+        import gc
+        gc.collect()
+        
+        # memory_info = psutil.virtual_memory()
+        # print("Memory: ", memory_info)
+        
+        print("Start training")
 
         if_train = True
         while if_train:
+            print(f"Explore environment with {horizon_len} steps.")
             buffer_items = agent.explore_env(env, horizon_len)
+            print("Done explore environment.")
+            
+            # check buffer
+            # print(buffer_items)
 
             action = buffer_items[1].flatten()
             action_count = th.bincount(action).data.cpu().numpy() / action.shape[0]
+            
+            # bug fix: fix segmentation error
+            action_count =  np.array(action_count)
             action_count = np.ceil(action_count * 998).astype(int)
 
             position = buffer_items[0][:, :, 0].long().flatten()
             position = position.float()  # TODO Only if on cpu
+            
             position_count = torch.histc(position, bins=env.max_position * 2 + 1, min=-2, max=2)
             position_count = position_count.data.cpu().numpy() / position.shape[0]
+            
+            # bug fix: fix segmentation error
+            position_count =  np.array(position_count)
             position_count = np.ceil(position_count * 998).astype(int)
+
+            print(f"  Buffer: action_count = {action_count}, positions_count = {position_count}")
 
             print(";;;", " " * 70, action_count, position_count)
 
@@ -204,10 +251,12 @@ class Ensemble:
             else:
                 buffer[:] = buffer_items
 
+            print("Update neural network using buffer.")
             torch.set_grad_enabled(True)
             logging_tuple = agent.update_net(buffer)
             torch.set_grad_enabled(False)
 
+            print(f"Run evaluator with trained actor.")
             evaluator.evaluate_and_save(
                 actor=agent.act,
                 steps=horizon_len,
@@ -231,17 +280,34 @@ class Ensemble:
 def run(save_path, agent_list, log_rules=False):
     import sys
 
-    gpu_id = int(sys.argv[1]) if len(sys.argv) > 1 else -1  # 从命令行参数里获得GPU_ID
+    ##### Test Config#####
+    if_test = False
+    if_tune_params = False #PPO & A2C
+    if_sac = False #SAC
+    #######################
+
+    # gpu_id = int(sys.argv[1]) if len(sys.argv) > 1 else -1  # 从命令行参数里获得GPU_ID
+    gpu_id = 0
 
     from erl_agent import AgentD3QN
 
     num_sims = 2**12
+    
+    if if_sac:
+        num_sims = 10
+
+    
+    if if_test:
+        num_sims = 2
+    
     num_ignore_step = 60
     max_position = 1
     step_gap = 2
     slippage = 7e-7
 
     max_step = (4800 - num_ignore_step) // step_gap
+    if if_test:
+        max_step = 20
 
     env_args = {
         "env_name": "TradeSimulator-v0",
@@ -258,25 +324,61 @@ def run(save_path, agent_list, log_rules=False):
     args = Config(agent_class=AgentD3QN, env_class=TradeSimulator, env_args=env_args)
     args.gpu_id = gpu_id
     args.random_seed = gpu_id
+    
     args.net_dims = (128, 128, 128)
+    
+    
+    if if_tune_params:
+        args.net_dims = (64, 64, 64)
 
     args.gamma = 0.995
     args.explore_rate = 0.005
     args.state_value_tau = 0.01
     args.soft_update_tau = 2e-6
     args.learning_rate = 2e-6
+    
+    if if_tune_params:
+        args.learning_rate = 1e-4
+    
     args.batch_size = 512
-    args.break_step = int(32)  # TODO reset to 32e4
+    
+    if if_test:
+        args.batch_size = 5
+    
+    if if_tune_params:
+        args.batch_size = 64
+
+    
+    # args.break_step = int(32e4)
+    args.break_step = int(128e4)
+    if if_test:
+        args.break_step = int(32)
+        
+    print("break_step: ", args.break_step)
+    
     args.buffer_size = int(max_step * 32)
     args.repeat_times = 2
+    
     args.horizon_len = int(max_step * 4)
+    if if_test:
+        args.horizon_len = int(20) 
+
     args.eval_per_step = int(max_step)
     args.num_workers = 1
     args.save_gap = 8
 
     args.eval_env_class = EvalTradeSimulator
     args.eval_env_args = env_args.copy()
+    
+    args.is_discrete = True
+    
+    ## set in agent
+    # args.if_off_policy = False
+    
 
+    print("max_step: ", max_step)
+    print("buffer_size: ", args.buffer_size)
+    
     ensemble_env = Ensemble(
         log_rules,
         save_path,
@@ -284,12 +386,15 @@ def run(save_path, agent_list, log_rules=False):
         agent_list,
         args,
     )
+    
     ensemble_env.ensemble_train()
 
-
 if __name__ == "__main__":
-
-    run(
-        "ensemble_teamname",
-        [AgentD3QN, AgentDoubleDQN, AgentDoubleDQN, AgentTwinD3QN],
-    )
+    torch.cuda.empty_cache()
+    run("ensemble_fermion",
+        [AgentD3QN],
+        # [AgentDoubleDQN]
+        # [AgentDiscretePPO]
+        # [AgentDiscreteA2C]
+        # [AgentDiscreteSAC]
+       )

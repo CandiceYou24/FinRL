@@ -160,7 +160,11 @@ class ActorPPO(nn.Module):
 
     @staticmethod
     def convert_action_for_env(action: TEN) -> TEN:
-        return action.tanh()
+        # convert action to range between -1 and 1
+        new_action = action.tanh()
+        # add a singleton to make environment stepping method
+        new_action = new_action.unsqueeze(1)
+        return new_action
 
 
 class ActorDiscretePPO(ActorPPO):
@@ -186,15 +190,32 @@ class ActorDiscretePPO(ActorPPO):
     def get_logprob_entropy(self, state: TEN, action: TEN) -> (TEN, TEN):
         state = self.state_norm(state)
         a_prob = self.soft_max(self.net(state))  # action.shape == (batch_size, 1), action.dtype = th.int
-        dist = self.ActionDist(a_prob)
-        logprob = dist.log_prob(action.squeeze(1))
+        dist = self.ActionDist(a_prob)        
+        # print("actions: ", action)
+
+        # fix dimension
+        # logprob = dist.log_prob(action.squeeze(1))
+        logprob = dist.log_prob(action)
+        
         entropy = dist.entropy()
+        # print("actions log prob: ", logprob)
+        # print("action distribution entropy: ", entropy)
         return logprob, entropy
 
+#     @staticmethod
+#     def convert_action_for_env(action: TEN) -> TEN:
+#         return action.long()
+    
     @staticmethod
     def convert_action_for_env(action: TEN) -> TEN:
-        return action.long()
-
+        # print("action", action)
+        # convert action to range between -1 and 1
+        new_action = action.long()
+        # add a singleton to make environment stepping method
+        new_action = new_action.unsqueeze(1)
+        # print("new action", new_action)
+        return new_action
+    
 
 class CriticPPO(th.nn.Module):
     def __init__(self, net_dims: List[int], state_dim: int, action_dim: int):
@@ -214,6 +235,140 @@ class CriticPPO(th.nn.Module):
     def state_norm(self, state: TEN) -> TEN:
         return (state - self.state_avg) / (self.state_std + 1e-4)
 
+
+
+'''SAC'''
+
+class ActorBase(nn.Module):
+    def __init__(self, state_dim: int, action_dim: int):
+        super().__init__()
+        self.net = None  # build_mlp(net_dims=[state_dim, *net_dims, action_dim])
+
+        self.state_dim = state_dim
+        self.action_dim = action_dim
+        self.explore_noise_std = None  # standard deviation of exploration action noise
+        self.ActionDist = th.distributions.normal.Normal
+
+    def forward(self, state: TEN) -> TEN:
+        action = self.net(state)
+        return action.tanh()
+
+
+class CriticBase(nn.Module):
+    def __init__(self, state_dim: int, action_dim: int):
+        super().__init__()
+        self.state_dim = state_dim
+        self.action_dim = action_dim
+        self.net = None  # build_mlp(net_dims=[state_dim + action_dim, *net_dims, 1])
+
+    def forward(self, state: TEN, action: TEN) -> TEN:
+        values = self.get_q_values(state=state, action=action)
+        value = values.mean(dim=-1, keepdim=True)
+        return value  # Q value
+
+    def get_q_values(self, state: TEN, action: TEN) -> TEN:
+        values = self.net(th.cat((state, action), dim=1))
+        return values  # Q values
+
+
+class ActorSAC(ActorBase):
+    def __init__(self, net_dims: List[int], state_dim: int, action_dim: int):
+        super().__init__(state_dim=state_dim, action_dim=action_dim)
+        self.net_s = build_mlp(dims=[state_dim, *net_dims], if_raw_out=False)  # network of encoded state
+        self.net_a = build_mlp(dims=[net_dims[-1], action_dim * 2])  # the average and log_std of action
+        layer_init_with_orthogonal(self.net_a[-1], std=0.1)
+    
+    def forward(self, state):
+        s_enc = self.net_s(state)  # encoded state
+        a_avg = self.net_a(s_enc)[:, :self.action_dim]
+        return a_avg.tanh()  # action
+
+    def get_action(self, state):
+        s_enc = self.net_s(state)  # encoded state
+        a_avg, a_std_log = self.net_a(s_enc).chunk(2, dim=1)
+        a_std = a_std_log.clamp(-16, 2).exp()
+        dist = self.ActionDist(a_avg, a_std)
+        return dist.rsample().tanh()  # action (re-parameterize)
+
+    def get_action_logprob(self, state):
+        s_enc = self.net_s(state)  # encoded state
+        a_avg, a_std_log = self.net_a(s_enc).chunk(2, dim=1)
+        a_std = a_std_log.clamp(-16, 2).exp()
+
+        dist = self.ActionDist(a_avg, a_std)
+        action = dist.rsample()
+
+        action_tanh = action.tanh()
+        logprob = dist.log_prob(a_avg) #not action log prob?
+        logprob -= (-action_tanh.pow(2) + 1.000001).log()  # fix logprob using the derivative of action.tanh()
+        return action_tanh, logprob.sum(1)
+
+# Add discrete version fo SAC
+class ActorDiscreteSAC(ActorSAC):
+        
+    def __init__(self, net_dims: List[int], state_dim: int, action_dim: int):
+        super().__init__(net_dims=net_dims, state_dim=state_dim, action_dim=action_dim)
+        self.ActionDist = th.distributions.Categorical
+        self.soft_max = nn.Softmax(dim=-1)
+        
+    def get_action(self, state: TEN) -> (TEN, TEN):
+        state = self.state_norm(state)
+        a_prob = self.soft_max(self.net(state))
+        a_dist = self.ActionDist(a_prob)
+        action = a_dist.sample()
+        logprob = a_dist.log_prob(action)
+        return action, logprob
+
+
+    def get_action(self, state):
+        s_enc = self.net_s(state)  # encoded state
+        a_avg, a_std_log = self.net_a(s_enc).chunk(2, dim=1)
+        a_prob = self.soft_max(a_avg)
+        dist = self.ActionDist(a_prob)
+        return dist.sample().tanh()
+    
+
+    def get_action_logprob(self, state):
+        s_enc = self.net_s(state)  # encoded state
+        a_avg, a_std_log = self.net_a(s_enc).chunk(2, dim=1)
+        a_prob = self.soft_max(a_avg)
+        dist = self.ActionDist(a_prob)
+        action = dist.sample()
+        action_tanh = action.tanh()
+        logprob = dist.log_prob(action)
+        logprob -= (-action_tanh.pow(2) + 1.000001).log()  # fix logprob using the derivative of action.tanh()
+        return action_tanh, logprob
+
+
+class CriticEnsemble(CriticBase):
+    def __init__(self, net_dims: List[int], state_dim: int, action_dim: int, num_ensembles: int = 4):
+        super().__init__(state_dim=state_dim, action_dim=action_dim)
+        # self.encoder_sa = build_mlp(dims=[state_dim + action_dim, net_dims[0]])  # encoder of state and action
+        #adjust for discrete action space
+        self.encoder_sa = build_mlp(dims=[state_dim + 1, net_dims[0]])  # encoder of state and action
+
+        self.decoder_qs = []
+        for net_i in range(num_ensembles):
+            decoder_q = build_mlp(dims=[*net_dims, 1])
+            layer_init_with_orthogonal(decoder_q[-1], std=0.5)
+
+            self.decoder_qs.append(decoder_q)
+            setattr(self, f"decoder_q{net_i:02}", decoder_q)
+
+    def get_q_values(self, state: TEN, action: TEN) -> TEN:
+        # tensor_sa = self.encoder_sa(th.cat((state, action), dim=1))
+        
+        # adjust action dimension
+        if action.dim() == 1:  # Check if action has a single dimension
+            action = action.unsqueeze(-1)  # Make action [batch_size, 1] if discrete
+        elif action.dim() == 3:  # Action may already have [batch_size, action_dim, 1]
+            action = action.squeeze(-1)  # Ensure it is [batch_size, action_dim]
+    
+        tensor_sa = self.encoder_sa(th.cat((state, action), dim=1))
+        values = th.concat([decoder_q(tensor_sa) for decoder_q in self.decoder_qs], dim=-1)    
+        return values  # Q values
+        
+    
 '''util'''
     
 def build_mlp(dims: [int], activation: nn = None, if_raw_out: bool = True) -> nn.Sequential:
