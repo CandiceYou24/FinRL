@@ -60,7 +60,11 @@ class Config:
 
         '''Arguments for evaluate'''
         self.cwd = None  # current working directory to save model. None means set automatically
-        self.if_remove = True  # remove the cwd folder? (True, False, None:ask me)
+        
+        # Continue Training
+        # self.if_remove = True  # remove the cwd folder? (True, False, None:ask me)
+        self.if_remove = False  # remove the cwd folder? (True, False, None:ask me)
+
         self.break_step = np.inf  # break training if 'total_step > break_step'
         self.break_score = np.inf  # break training if `cumulative_rewards > break_score`
         self.if_keep_save = True  # keeping save the checkpoint. False means save until stop training.
