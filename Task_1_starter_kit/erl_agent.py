@@ -39,8 +39,8 @@ class AgentDoubleDQN:
         ## Critic is set to the same instance as actor
         self.cri_class = getattr(self, "cri_class", None)  # means `self.cri = self.act`
         
-        self.act_class =  QNetTwin
-        self.cri_class = None
+        # self.act_class =  QNetTwin
+        # self.cri_class = None
         
         self.gamma = args.gamma  # discount factor of future rewards
         self.num_envs = args.num_envs  # the number of sub envs in vectorized env. `num_envs=1` in single env.
@@ -444,7 +444,8 @@ class AgentPPO(AgentDoubleDQN):
         obj_critic_avg = np.array(obj_critics).mean() if len(obj_critics) else 0.0
         obj_actor_avg = np.array(obj_actors).mean() if len(obj_actors) else 0.0
         a_std_log = getattr(self.act, 'a_std_log', th.zeros(1)).mean()
-        return obj_critic_avg, obj_actor_avg, a_std_log.item()
+        # return obj_critic_avg, obj_actor_avg, a_std_log.item()
+        return obj_critic_avg, obj_actor_avg
 
     def update_objectives(self, buffer, update_t: int) -> Tuple[float, float]:
         
