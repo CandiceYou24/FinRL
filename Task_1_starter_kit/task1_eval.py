@@ -3,7 +3,7 @@ import torch
 import numpy as np
 from erl_config import Config, build_env
 from trade_simulator import EvalTradeSimulator
-from erl_agent import AgentD3QN, AgentDoubleDQN, AgentTwinD3QN
+from erl_agent import AgentD3QN, AgentDoubleDQN, AgentDiscretePPO
 from collections import Counter
 from metrics import sharpe_ratio, max_drawdown, return_over_max_drawdown
 
@@ -70,7 +70,7 @@ class EnsembleEvaluator:
         for _ in range(trade_env.max_step):
             actions = []
             intermediate_state = last_state
-
+            q_values_list = []
             # Collect actions from each agent
             for agent in agents:
                 actor = agent.act
@@ -79,8 +79,15 @@ class EnsembleEvaluator:
                 tensor_action = tensor_q_values.argmax(dim=1)
                 action = tensor_action.detach().cpu().unsqueeze(1)
                 actions.append(action)
+                q_values_list.append(tensor_q_values.detach().cpu())
 
-            action = self._ensemble_action(actions=actions)
+            # Confidence-based aggregation
+            q_values_sum = torch.zeros_like(q_values_list[0])
+            for q_values in q_values_list:
+                q_values_sum += q_values
+            action = q_values_sum.argmax(dim=1).unsqueeze(1)
+
+            #action = self._ensemble_action(actions=actions)
             action_int = action.item() - 1
 
             state, reward, done, _ = trade_env.step(action=action)
@@ -184,6 +191,6 @@ def run_evaluation(save_path, agent_list):
 
 
 if __name__ == "__main__":
-    save_path = "trained_agents"
-    agent_list = [AgentD3QN, AgentDoubleDQN, AgentTwinD3QN]
+    save_path = "Trained_1.28M"
+    agent_list = [AgentD3QN, AgentDoubleDQN, AgentDiscretePPO]
     run_evaluation(save_path, agent_list)
