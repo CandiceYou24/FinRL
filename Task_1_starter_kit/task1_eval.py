@@ -70,7 +70,7 @@ class EnsembleEvaluator:
         for _ in range(trade_env.max_step):
             actions = []
             intermediate_state = last_state
-            q_values_list = []
+
             # Collect actions from each agent
             for agent in agents:
                 actor = agent.act
@@ -79,15 +79,8 @@ class EnsembleEvaluator:
                 tensor_action = tensor_q_values.argmax(dim=1)
                 action = tensor_action.detach().cpu().unsqueeze(1)
                 actions.append(action)
-                q_values_list.append(tensor_q_values.detach().cpu())
 
-            # Confidence-based aggregation
-            q_values_sum = torch.zeros_like(q_values_list[0])
-            for q_values in q_values_list:
-                q_values_sum += q_values
-            action = q_values_sum.argmax(dim=1).unsqueeze(1)
-
-            #action = self._ensemble_action(actions=actions)
+            action = self._ensemble_action(actions=actions)
             action_int = action.item() - 1
 
             state, reward, done, _ = trade_env.step(action=action)
