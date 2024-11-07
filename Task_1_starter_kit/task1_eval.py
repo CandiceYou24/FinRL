@@ -96,7 +96,7 @@ class EnsembleEvaluator:
             positions.append(trade_env.position)
 
             # Manually compute cumulative returns
-            mid_price = trade_env.price_ary[trade_env.step_i, 2].to(self.device)
+            mid_price = trade_env.price_ary[trade_env.step_is0, 2].to(self.device)
 
             new_cash = self.cash[-1]
 

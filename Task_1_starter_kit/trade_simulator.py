@@ -68,6 +68,7 @@ class TradeSimulator:
         # reset()
         self.step_i = 0
         self.step_is = th.zeros((num_sims,), dtype=th.long, device=device)
+        self.step_is0 = th.zeros((num_sims,), dtype=th.long, device=device)
         self.action_int = th.zeros((num_sims,), dtype=th.long, device=device)
         self.rolling_asset = th.zeros((num_sims,), dtype=th.long, device=device)
 
@@ -103,6 +104,8 @@ class TradeSimulator:
         i0s = np.random.randint(self.seq_len, self.full_seq_len - self.seq_len * 2, size=self.num_sims)
         self.step_i = 0
         self.step_is = th.tensor(i0s, dtype=th.long, device=self.device)
+        self.step_is0 = th.tensor(i0s, dtype=th.long, device=self.device)
+
         self.cash = th.zeros((num_sims,), dtype=th.float32, device=device)
         self.asset = th.zeros((num_sims,), dtype=th.float32, device=device)
 
@@ -121,7 +124,7 @@ class TradeSimulator:
         self.step_i += self.step_gap
         step_is = self.step_is + self.step_i
         step_is_cpu = step_is.to(th.device("cpu"))
-        
+        self.step_is0 = step_is.detach()
         action = action.squeeze(1).to(self.device)
         action_int = action - 1  # map (0, 1, 2) to (-1, 0, +1), means (sell, nothing, buy)
         # action_int = (action - self.max_position) - self.position
