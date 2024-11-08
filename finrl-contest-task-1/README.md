@@ -56,15 +56,15 @@ The code is based on starter kit, which includes updates as described below:
 
   Updates:
 
-  (1) Add agents for PPO, Discrete PPO, A2C, Discrete A2C, and Discrete SAC are added.
-  (2) Remove AgentTwinD3QN, as it is implemented the same way as DoubleDQN (should add new actor).
+  (1) Add agents for PPO, Discrete PPO, A2C, Discrete A2C, and Discrete SAC.
+  (2) Remove AgentTwinD3QN, as it is implemented the same way as DoubleDQN (should add new actor when time allows).
 
 
 - `erl_net.py`: Neural network structures used in the reinforcement learning algorithm.
 
   Updates:
 
-  Add actor and critic neural networks for PPO, Discrete PPO, SAC, and Discrete SAC are added.
+  Add actor and critic neural networks for PPO, Discrete PPO, SAC, and Discrete SAC.
 
 
 - `erl_evaluator.py`: Evaluates the performance of the reinforcement learning agent.
@@ -88,7 +88,7 @@ The code is based on starter kit, which includes updates as described below:
   (5) Add a few fine-tuning params for PPO and A2C.
 
 
-- `task1_eval.py`: This file contains code that loads your ensemble and simulates trading over a validation dataset. You may create this validation dataset by holding out a part of the training data.
+- `task1_eval.py`: This file contains code that loads the ensemble and simulates trading over a validation dataset. 
 
   Updates:
 
@@ -104,7 +104,7 @@ The code is based on starter kit, which includes updates as described below:
 
         - Boltzmann Multiplication
 
-  (3) Add additional performance metrics and summary.
+  (3) Add additional performance metrics and export summary.
 
   (4) Minor fixes:
 
