@@ -95,14 +95,18 @@ class TradeSimulator:
 
         num_sims = self.num_sims
         device = self.device
-
-        # if if_random:
-        # print(self.seq_len)
-        # print(self.full_seq_len)
+        
+        #No randomization for single environement, to be compatible with evaluation code.
+#         if self.num_sims == 1:
+#             i0s = np.zeros(self.num_sims)
+#         else:
+#             i0s = np.random.randint(self.seq_len, self.full_seq_len - self.seq_len * 2, size=self.num_sims)
         
         i0s = np.random.randint(self.seq_len, self.full_seq_len - self.seq_len * 2, size=self.num_sims)
+
         self.step_i = 0
         self.step_is = th.tensor(i0s, dtype=th.long, device=self.device)
+
         self.cash = th.zeros((num_sims,), dtype=th.float32, device=device)
         self.asset = th.zeros((num_sims,), dtype=th.float32, device=device)
 
@@ -127,6 +131,12 @@ class TradeSimulator:
         # action_int = (action - self.max_position) - self.position
         del action
 
+#         print("\n-----------ENV STEP-----------------------")
+#         prev_state = self.get_state(step_is_cpu-self.step_gap)
+#         print("ENV: index", step_is_cpu )
+#         print("ENV: pre-action state", prev_state)
+#         print("ENV: original action", action_int)
+
         old_cash = self.cash
         old_asset = self.asset
         old_position = self.position
@@ -135,6 +145,7 @@ class TradeSimulator:
         # bid_price = self.price_ary[step_is_cpu, 0].to(self.device)
         # ask_price = self.price_ary[step_is_cpu, 1].to(self.device)
         mid_price = self.price_ary[step_is_cpu, 2].to(self.device)
+        # print("mid_price", mid_price)
 
         """get action_int"""
         truncated = self.step_i >= (self.max_step * self.step_gap)
@@ -206,7 +217,7 @@ class TradeSimulator:
         self.asset = new_asset  # update the total asset
         self.position = new_position  # update the position
         self.action_int = action_int  # update the action_int
-
+        
         state = self.get_state(step_is_cpu)
         info_dict = {}
         if truncated:
@@ -215,6 +226,14 @@ class TradeSimulator:
         else:
             # terminal = old_position.ne(0) & new_position.eq(0)
             terminal = th.zeros_like(self.position, dtype=th.bool)
+
+#         print("ENV: modified action", action_int)
+#         print("ENV: post-action state", state)
+#         print("ENV: mid_price", mid_price, ", cost", cost)
+#         print("ENV: market_impact", cost * self.slippage)
+#         print("ENV: old_cash", old_cash, ", new_cash", new_cash)
+#         print("ENV: reward", reward)
+#         print("------------------------------------------\n")
 
         return state, reward, terminal, info_dict
 

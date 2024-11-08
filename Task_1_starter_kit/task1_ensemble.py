@@ -293,7 +293,7 @@ def run(save_path, agent_list, log_rules=False):
     num_sims = 2**12
     
     if if_sac:
-        num_sims = 10
+        num_sims = 2**10
 
     
     if if_test:
@@ -325,10 +325,6 @@ def run(save_path, agent_list, log_rules=False):
     args.random_seed = gpu_id
     
     args.net_dims = (128, 128, 128)
-    
-    
-    if if_tune_params:
-        args.net_dims = (64, 64, 64)
 
     args.gamma = 0.995
     args.explore_rate = 0.005
@@ -336,8 +332,8 @@ def run(save_path, agent_list, log_rules=False):
     args.soft_update_tau = 2e-6
     args.learning_rate = 2e-6
     
-    if if_tune_params:
-        args.learning_rate = 1e-4
+#     if if_tune_params:
+#         args.learning_rate = 1e-5
     
     args.batch_size = 512
     
@@ -345,11 +341,15 @@ def run(save_path, agent_list, log_rules=False):
         args.batch_size = 5
     
     if if_tune_params:
-        args.batch_size = 64
+        args.batch_size = 128
 
     
     # args.break_step = int(32e4)
     args.break_step = int(128e4)
+    
+    if if_sac:
+        args.break_step = int(16e4)
+        
     if if_test:
         args.break_step = int(32)
         
@@ -359,6 +359,7 @@ def run(save_path, agent_list, log_rules=False):
     args.repeat_times = 2
     
     args.horizon_len = int(max_step * 4)
+    
     if if_test:
         args.horizon_len = int(20) 
 
@@ -395,5 +396,5 @@ if __name__ == "__main__":
         # [AgentDoubleDQN]
         # [AgentDiscretePPO]
         # [AgentDiscreteA2C]
-        # [AgentDiscreteSAC]
+        #[AgentDiscreteSAC]
        )

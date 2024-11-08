@@ -58,12 +58,12 @@ class AgentDoubleDQN:
         self.last_state = None  # last state of the trajectory for training. last_state.shape == (num_envs, state_dim)
         self.device = th.device(f"cuda:{gpu_id}" if (th.cuda.is_available() and (gpu_id >= 0)) else "cpu")
         
-        print("  Base Agent: DoubleDQN")
-        print("  device", self.device)
-        print("  batch_size", self.batch_size)
-        print("  num_envs", self.num_envs)
-        print("  state_dim", state_dim)
-        print("  net_dim", net_dims)
+#         print("  Base Agent: DoubleDQN")
+#         print("  device", self.device)
+#         print("  batch_size", self.batch_size)
+#         print("  num_envs", self.num_envs)
+#         print("  state_dim", state_dim)
+#         print("  net_dim", net_dims)
 
         '''network'''
         act_class = getattr(self, "act_class", None)
@@ -78,22 +78,24 @@ class AgentDoubleDQN:
         self.cri = self.cri_target = self.act
         
     
-        print("network initialized")
+#         print("network initialized")
         
         '''optimizer'''
         
-        print(self.act.parameters())
+        # print(self.act.parameters())
+        
         self.act_optimizer = th.optim.AdamW(self.act.parameters(), self.learning_rate)
         self.cri_optimizer = th.optim.AdamW(self.cri.parameters(), self.learning_rate) \
             if cri_class else self.act_optimizer
         from types import MethodType  # built-in package of Python3
         self.act_optimizer.parameters = MethodType(get_optim_param, self.act_optimizer)
         self.cri_optimizer.parameters = MethodType(get_optim_param, self.cri_optimizer)
-        print(self.act_optimizer.parameters)
+        
+        #print(self.act_optimizer.parameters)
 
         self.criterion = th.nn.SmoothL1Loss(reduction="mean")
         
-        print("optimizer initialized")
+#         print("optimizer initialized")
 
         """save and load"""
         self.save_attr_names = {'act', 'act_target', 'act_optimizer', 'cri', 'cri_target', 'cri_optimizer'}
@@ -129,12 +131,12 @@ class AgentDoubleDQN:
 
         for attr_name in self.save_attr_names:
             file_path = f"{cwd}/{attr_name}.pth"
-            print("Agent file location: ", file_path)
+            # print("Agent file location: ", file_path)
             if if_save:
-                print(f"Saving agent network: {attr_name}")
+                # print(f"Saving agent network: {attr_name}")
                 th.save(getattr(self, attr_name), file_path)
             elif os.path.isfile(file_path):
-                print(f"Loading agent network: {attr_name}")
+                # print(f"Loading agent network: {attr_name}")
                 setattr(self, attr_name, th.load(file_path, map_location=self.device))
 
     def explore_env(self, env, horizon_len: int, if_random: bool = False) -> Tuple[Tensor, ...]:
@@ -292,12 +294,12 @@ class AgentD3QN(AgentDoubleDQN):  # Dueling Double Deep Q Network. (D3QN)
         self.cri = self.cri_target = self.act
         
 
-## AgentTwinD3QN was defined exatly the same as DDQN, commenting out for now
-# class AgentTwinD3QN(AgentDoubleDQN):
-#     def __init__(self, net_dims: [int], state_dim: int, action_dim: int, gpu_id: int = 0, args: Config = Config()):
-#         self.act_class = getattr(self, "act_class", QNetTwin)
-#         self.cri_class = getattr(self, "cri_class", None)  # means `self.cri = self.act`
-#         super().__init__(net_dims=net_dims, state_dim=state_dim, action_dim=action_dim, gpu_id=gpu_id, args=args)
+# AgentTwinD3QN was defined exatly the same as DDQN, not used
+class AgentTwinD3QN(AgentDoubleDQN):
+    def __init__(self, net_dims: [int], state_dim: int, action_dim: int, gpu_id: int = 0, args: Config = Config()):
+        self.act_class = getattr(self, "act_class", QNetTwin)
+        self.cri_class = getattr(self, "cri_class", None)  # means `self.cri = self.act`
+        super().__init__(net_dims=net_dims, state_dim=state_dim, action_dim=action_dim, gpu_id=gpu_id, args=args)
 
 
 
